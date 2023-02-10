@@ -183,62 +183,111 @@ function openai_content_generator_render_block($block) {
     $max_tokens = get_option( 'openai_content_generator_max_tokens', 500 );
     ?>
     <div style="padding:12px;border:2px solid #8c8c8c">
-        <p style="color:#9b9b9b"><strong>Max Tokens:</strong> <?php echo esc_html( $max_tokens ); ?></p>
+        <p style="color:#9b9b9b"><strong>Max Tokens:</strong> <input type="text" value="<?php echo esc_html( $max_tokens ); ?>" id="maxTokens"/></p>
         <p><textarea name="textarea" id="textarea" style="width:100%;" rows="8"><?php echo $textarea_value; ?></textarea></p>
-        <p><button id="generate-content-button">Generate Content</button></p>
+        <p><button id="generate-content-button" class="generate-content-button">Generate Content</button></p>
     </div>
     <script>
-        document.querySelector('#generate-content-button').addEventListener('click', function() {
-            // Get the textarea value
-            var textarea = document.querySelector('#textarea');
-            var textareaValue = textarea.value;
-            var generateContentButton = this;
-            generateContentButton.setAttribute('disabled', true);
-            generateContentButton.innerHTML = '<span class="spinner is-active"></span> Generating Content...';
-
-            // Make the API request to OpenAI
-            var xhr = new XMLHttpRequest();
-            xhr.open('POST', 'https://api.openai.com/v1/completions');
-            xhr.setRequestHeader('Content-Type', 'application/json');
-            xhr.setRequestHeader('Authorization', 'Bearer <?php echo $api_key; ?>');
-            xhr.setRequestHeader('model', 'content-filter-alpha');
 
 
-            xhr.onload = function() {
-                if (xhr.status === 200) {
-                    // Split the content by line returns and create separate blocks
-                    var response = JSON.parse(xhr.responseText);
-                    var content = response.choices[0].text;
-                    var contents = content.split(/\r\n|\n|\r/);
-                    var blocks = [];
-                    contents.forEach(function(c) {
-                        if (c.trim() !== '') {
-                            blocks.push(wp.blocks.createBlock('core/paragraph', {
-                                content: c
-                            }));
-                        }
-                    });
-                    var clientId = wp.data.select('core/block-editor').getSelectedBlockClientId();
-                    wp.data.dispatch('core/block-editor').replaceBlock(
-                        clientId,
-                        blocks
-                    );
-                } else {
-                    // Handle error
-                    console.error('OpenAI API request failed with status code: ' + xhr.status);
-                    generateContentButton.removeAttribute('disabled');
-                    generateContentButton.innerHTML = 'Generate Content';
-                }
-            };
 
 
-            xhr.send(JSON.stringify({
-                model: "text-davinci-003",
-                prompt: textareaValue,
-                max_tokens: parseInt(wp.data.select('core/editor').getEditedPostAttribute('meta')['openai_content_generator_max_tokens'], 10),
-                temperature: 0.5,
-            }));
-        });
+
+
+
+
+
+
+        //document.querySelector('#generate-content-button').addEventListener('click', function() {
+        //    // Get the textarea value
+        //    var textarea = document.querySelector('#textarea');
+        //    var textareaValue = textarea.value;
+        //    var maxTokens = document.querySelector('#maxTokens');
+        //    var maxTokensValue = maxTokens.value;
+        //
+        //    var generateContentButton = this;
+        //    generateContentButton.setAttribute('disabled', true);
+        //    generateContentButton.innerHTML = '<span class="spinner is-active"></span> Generating Content...';
+        //
+        //    // Make the API request to OpenAI
+        //    var xhr = new XMLHttpRequest();
+        //    xhr.open('POST', 'https://api.openai.com/v1/completions');
+        //    xhr.setRequestHeader('Content-Type', 'application/json');
+        //    xhr.setRequestHeader('Authorization', 'Bearer <?php //echo $api_key; ?>//');
+        //    xhr.setRequestHeader('model', 'content-filter-alpha');
+        //
+        //
+        //    xhr.onload = function() {
+        //        if (xhr.status === 200) {
+        //            // Split the content by line returns and create separate blocks
+        //            var response = JSON.parse(xhr.responseText);
+        //            var content = response.choices[0].text;
+        //            var contents = content.split(/\r\n|\n|\r/);
+        //            var blocks = [];
+        //            contents.forEach(function(c) {
+        //                if (c.trim() !== '') {
+        //                    blocks.push(wp.blocks.createBlock('core/paragraph', {
+        //                        content: c
+        //                    }));
+        //                }
+        //            });
+        //            var clientId = wp.data.select('core/block-editor').getSelectedBlockClientId();
+        //            wp.data.dispatch('core/block-editor').replaceBlock(
+        //                clientId,
+        //                blocks
+        //            );
+        //        } else {
+        //            // Handle error
+        //            console.error('OpenAI API request failed with status code: ' + xhr.status);
+        //            generateContentButton.removeAttribute('disabled');
+        //            generateContentButton.innerHTML = 'Generate Content';
+        //        }
+        //    };
+        //
+        //    xhr.send(JSON.stringify({
+        //        model: "text-davinci-003",
+        //        prompt: textareaValue,
+        //        max_tokens: parseInt(maxTokensValue),
+        //        temperature: 0.5,
+        //    }));
+
+        //});
     </script>
     <?php
+}
+
+
+//enqueue js
+//function openai_content_generator_admin_scripts() {
+//    wp_enqueue_script( 'openai-content-generator-admin-js', plugins_url( 'js/openai-content-generator-admin.js', __FILE__ ), array( 'jquery' ), '1.0.0', true );
+//}
+//add_action( 'admin_enqueue_scripts', 'openai_content_generator_admin_scripts' );
+
+function openai_content_generator_enqueue_block_assets() {
+    wp_enqueue_script( 'openai-content-generator-block-script', plugins_url( 'js/openai-content-generator-admin.js', __FILE__ ), array( 'wp-blocks', 'wp-i18n', 'wp-element' ), filemtime( plugin_dir_path( __FILE__ ) . 'js/openai-content-generator-admin.js' ), true );
+}
+add_action( 'enqueue_block_assets', 'openai_content_generator_enqueue_block_assets' );
+
+
+
+//Get and send the data to API
+add_action( 'wp_ajax_openai_content_generator_generate_content', 'openai_content_generator_generate_content' );
+
+function openai_content_generator_generate_content() {
+    // Check the security nonce
+    check_ajax_referer( 'openai_content_generator_nonce', 'security' );
+
+    // Retrieve the block data
+    $blockData = $_POST['blockData'];
+
+    // Make the API request to OpenAI using the API key and the textarea value as input
+    $apiKey = openai_content_generator_get_api_key();
+    $prompt = $blockData['prompt'];
+    $maxTokens = isset($blockData['maxTokens']) ? $blockData['maxTokens'] : openai_content_generator_get_max_tokens();
+    $response = openai_content_generator_send_request($apiKey, $prompt, $maxTokens);
+
+    // Return the generated content
+    wp_send_json_success(array_map(function ($text) {
+        return preg_replace('/\s+/', ' ', $text);
+    }, explode("\n\n", $response->choices[0]->text)));
 }
